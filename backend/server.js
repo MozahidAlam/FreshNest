@@ -52,7 +52,7 @@ function auth(roles = []) {
 }
 // ═════════════════════════════════════════════════════════
 //  AUTH ROUTES
- *// POST /api/auth/register
+ // POST /api/auth/register
 
    app.post('/api/auth/register', async (req, res) => {
   try {
@@ -72,9 +72,23 @@ function auth(roles = []) {
     
     // Hash password — never store plain text
     const hash = await bcrypt.hash(password, 12);
+
     const [result] = await pool.execute(
       'INSERT INTO users (name, email, password_hash, role, location) VALUES (?, ?, ?, ?, ?)',
       [name, email, hash, role, location]
     );
-    
+
+    res.status(201).json({
+      success: true,
+      data: { id: result.insertId, name, email, role }
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ success: false, error: 'Registration failed.' });
+  }
+});
+
+// POST /api/auth/login
+
+
 
