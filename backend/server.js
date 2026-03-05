@@ -52,29 +52,41 @@ function auth(roles = []) {
 }
 // ═════════════════════════════════════════════════════════
 //  AUTH ROUTES
- *// POST /api/auth/register
+ // POST /api/auth/register
 
-   app.post('/api/auth/register', async (req, res) => {
+   app.post('/api/auth/login', async (req, res) => {
   try {
-    const { name, email, password, role, location = '' } = req.body;
-    if (!name || !email || !password || !role)
-      return res.status(400).json({ success: false, error: 'All fields required.' });
+    const { email, password } = req.body;
 
-    if (!['farmer', 'transport', 'dealer'].includes(role))
-      return res.status(400).json({ success: false, error: 'Invalid role.' });
+    if (!email || !password)
+      return res.status(400).json({ success: false, error: 'Email and password required.' });
 
-    if (password.length < 6)
-      return res.status(400).json({ success: false, error: 'Password must be at least 6 characters.' });
+    const users = await query('SELECT * FROM users WHERE email = ? LIMIT 1', [email]);
+    if (!users.length)
+      return res.status(401).json({ success: false, error: 'Invalid email or password.' });
 
-    const existing = await query('SELECT id FROM users WHERE email = ?', [email]);
-    if (existing.length)
-      return res.status(409).json({ success: false, error: 'Email already registered.' });
-    
-    // Hash password — never store plain text
-    const hash = await bcrypt.hash(password, 12);
-    const [result] = await pool.execute(
-      'INSERT INTO users (name, email, password_hash, role, location) VALUES (?, ?, ?, ?, ?)',
-      [name, email, hash, role, location]
+    const user    = users[0];
+    const isMatch = await bcrypt.compare(password, user.password_hash);
+    if (!isMatch)
+      return res.status(401).json({ success: false, error: 'Invalid email or password.' });
+
+    // Sign JWT — valid for 7 days
+    const token = jwt.sign(
+      { id: user.id, name: user.name, email: user.email, role: user.role },
+      process.env.JWT_SECRET || 'harvestlink_secret',
+      { expiresIn: '7d' }
     );
-    
+
+    res.json({
+      success: true,
+      data: {
+        token,
+        user: { id: user.id, name: user.name, email: user.email, role: user.role, location: user.location }
+      }
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ success: false, error: 'Login failed.' });
+  }
+});
 
